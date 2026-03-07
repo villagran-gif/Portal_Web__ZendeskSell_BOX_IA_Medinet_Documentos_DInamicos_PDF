@@ -1245,14 +1245,28 @@ function normalizePrevisionCanon(v) {
 
 function normalizeModalidad(v) {
   const s = String(v ?? '').trim();
-  const key = s.toLowerCase();
+  const key = s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 
   const map = {
     "fonasa": "Fonasa",
     "banmedica": "Banmédica",
+    "banmedica tradicional": "Banmédica",
+    "banmedica preferente": "Banmédica",
     "banmédica": "Banmédica",
     "mas vida": "Más Vida",
     "más vida": "Más Vida",
+    "isapre mas vida": "Más Vida",
+    "isapre más vida": "Más Vida",
+    "isapre nueva mas vida": "Más Vida",
+    "isapre nueva masvida": "Más Vida",
+    "nueva mas vida": "Más Vida",
+    "nueva masvida": "Más Vida",
+    "masvida": "Más Vida",
     "vida tres": "Vida Tres",
     "cruz blanca": "Cruz Blanca",
     "isapre cruzblanca": "Cruz Blanca",
@@ -1265,9 +1279,13 @@ function normalizeModalidad(v) {
     "dipreca": "DIPRECA",
     "particular": "Particular",
     "tramo a": "Tramo A",
+    "tramoa": "Tramo A",
     "tramo b": "Tramo B",
+    "tramob": "Tramo B",
     "tramo c": "Tramo C",
+    "tramoc": "Tramo C",
     "tramo d": "Tramo D",
+    "tramod": "Tramo D",
     "fuerza armadas": "Fuerza Armadas",
     "fundacion": "Fundación",
     "fundación": "Fundación",
@@ -1334,7 +1352,7 @@ function fillFields(obj) {
 
   // Dropdowns (TomSelect combobox): use smart setter so UI updates + normalize
   if (obj.aseguradora) setSmartValue(fields.aseguradora, obj.aseguradora, { normalize: normalizePrevisionCanon, allowCreate: false });
-  if (obj.modalidad) setSmartValue(fields.modalidad, obj.modalidad, { normalize: normalizeModalidad, allowCreate: true });
+  if (obj.modalidad) setSmartValue(fields.modalidad, obj.modalidad, { normalize: normalizeModalidad, allowCreate: false });
   if (obj.comuna) setSmartValue(fields.comuna, obj.comuna, { normalize: normalizeUpper, allowCreate: false });
 
   if (obj.direccion) fields.direccion.value = obj.direccion;
@@ -1585,7 +1603,7 @@ function initComboboxes() {
 
   if (window.TomSelect) {
     if (elA) new TomSelect(elA, { create: false, persist: true, maxOptions: 500, placeholder: "Selecciona…" });
-    if (elM) new TomSelect(elM, { create: true, persist: true, maxOptions: 500, placeholder: "Selecciona…" });
+    if (elM) new TomSelect(elM, { create: false, persist: true, maxOptions: 500, placeholder: "Selecciona…" });
     if (elC) new TomSelect(elC, { create: false, persist: true, maxOptions: 5000, placeholder: "Selecciona…" });
   }
 }
