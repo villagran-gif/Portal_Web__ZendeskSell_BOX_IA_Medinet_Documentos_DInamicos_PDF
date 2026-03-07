@@ -115,6 +115,48 @@ function normalizeAseguradoraAlias(v) {
   return map[key] || cleanValue(v);
 }
 
+function normalizeModalidadAlias(v) {
+  const key = normKey(v);
+  const map = {
+    'FONASA': 'Fonasa',
+    'BANMEDICA': 'Banmédica',
+    'BANMEDICA TRADICIONAL': 'Banmédica',
+    'BANMEDICA PREFERENTE': 'Banmédica',
+    'MAS VIDA': 'Más Vida',
+    'MASVIDA': 'Más Vida',
+    'ISAPRE MAS VIDA': 'Más Vida',
+    'ISAPRE NUEVA MAS VIDA': 'Más Vida',
+    'ISAPRE NUEVA MASVIDA': 'Más Vida',
+    'NUEVA MAS VIDA': 'Más Vida',
+    'NUEVA MASVIDA': 'Más Vida',
+    'VIDA TRES': 'Vida Tres',
+    'CRUZ BLANCA': 'Cruz Blanca',
+    'ISAPRE CRUZBLANCA': 'Cruz Blanca',
+    'ISAPRE CRUZ BLANCA': 'Cruz Blanca',
+    'CRUZBLANCA': 'Cruz Blanca',
+    'CRUZ NORTE': 'Cruz Norte',
+    'CRUZ DEL NORTE': 'Cruz Norte',
+    'COLMENA': 'Colmena',
+    'CONSALUD': 'Consalud',
+    'DIPRECA': 'DIPRECA',
+    'PARTICULAR': 'Particular',
+    'TRAMO A': 'Tramo A',
+    'TRAMOA': 'Tramo A',
+    'TRAMO B': 'Tramo B',
+    'TRAMOB': 'Tramo B',
+    'TRAMO C': 'Tramo C',
+    'TRAMOC': 'Tramo C',
+    'TRAMO D': 'Tramo D',
+    'TRAMOD': 'Tramo D',
+    'FUERZA ARMADAS': 'Fuerza Armadas',
+    'FUNDACION': 'Fundación',
+    'I CHUQUICAMATA': 'I. Chuquicamata',
+    'I. CHUQUICAMATA': 'I. Chuquicamata',
+    'MEDIMEL-CB': 'MEDIMEL-CB',
+  };
+  return map[key] || cleanValue(v);
+}
+
 async function getContactCatalog(force = false) {
   const now = Date.now();
   if (!force && CONTACT_CATALOG && (now - CONTACT_CATALOG_AT) < CATALOG_TTL_MS) return CONTACT_CATALOG;
@@ -956,7 +998,7 @@ app.post('/api/create-deal', async (req, res) => {
     const nombres = cleanValue(body.nombres || body.Nombres);
     const apellidos = cleanValue(body.apellidos || body.Apellidos);
     const aseguradoraRaw = normalizeAseguradoraAlias(body.aseguradora || body.prevision || body['Aseguradora'] || body['Previsión'] || body['Prevision']);
-    const modalidadRaw = cleanValue(body.modalidad || body['Modalidad'] || body['Tramo/Modalidad'] || body.tramo_modalidad);
+    const modalidadRaw = normalizeModalidadAlias(body.modalidad || body['Modalidad'] || body['Tramo/Modalidad'] || body.tramo_modalidad);
     const comunaInput = cleanValue(body.comuna || body['Comuna']);
     const comuna = canonicalComuna(comunaInput);
 
