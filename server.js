@@ -1397,6 +1397,74 @@ function safeName(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
 }
 
+function safePhone(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function fetchSellUserById(userId) {
+  const uid = Number(userId || 0);
+  if (!Number.isFinite(uid) || uid <= 0) return null;
+
+  const token = String(process.env.SELL_ACCESS_TOKEN || '').trim();
+  if (!token) return null;
+
+  try {
+    const r = await fetch(`https://api.getbase.com/v2/users/${uid}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!r.ok) return null;
+    const json = await r.json();
+    const u = json?.data || null;
+    if (!u) return null;
+
+    return {
+      id: u.id,
+      name: safeName(u.name || ''),
+      email: safeName(u.email || ''),
+      phone: safePhone(u.phone || u.mobile || u.phone_number || ''),
+    };
+  } catch (_err) {
+    return null;
+  }
+}
+
+async function resolveAgentForDocs(req, deal) {
+  const fromReqName = safeName(req.body?.actor?.name || req.body?.agent_name || req.body?.agentName || '');
+  const fromReqEmail = safeName(req.body?.actor?.email || req.body?.agent_email || req.body?.agentEmail || '');
+  const fromReqPhone = safePhone(req.body?.actor?.phone || req.body?.agent_phone || req.body?.agentPhone || '');
+
+  if (fromReqName || fromReqEmail || fromReqPhone) {
+    return {
+      name: fromReqName || '',
+      email: fromReqEmail || '',
+      phone: fromReqPhone || '',
+      source: 'request',
+    };
+  }
+
+  const ownerId = Number(deal?.owner_id || deal?.owner?.id || 0);
+  if (!Number.isFinite(ownerId) || ownerId <= 0) {
+    return { name: '', email: '', phone: '', source: 'none' };
+  }
+
+  const user = await fetchSellUserById(ownerId);
+  if (!user) {
+    return { name: '', email: '', phone: '', source: 'sell_owner_unavailable' };
+  }
+
+  return {
+    name: user.name || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    source: 'sell_owner',
+  };
+}
+
 function buildPatientFolderName({ rutHuman, rutNormNoDash, firstName, lastName }) {
   const rutPart = safeName(rutHuman || rutNormNoDash || '').replace(/\*/g, '');
   const namePart = safeName(`${firstName || ''} ${lastName || ''}`);
@@ -1623,12 +1691,16 @@ app.post('/v1/render', requireApiKey, async (req, res) => {
     });
 
     const dealIdForHeader = String(payload.deal_id || payload.deal?.id || '').trim();
-    const actorEmail = String(payload.actor_email || payload.actor?.email || '').trim();
+    const actorName = safeName(payload.actor_name || payload.actor?.name || '');
+    const actorEmail = safeName(payload.actor_email || payload.actor?.email || '');
+    const actorPhone = safePhone(payload.actor_phone || payload.actor?.phone || '');
     if (dealIdForHeader) {
       await ensureDealAgentHeader({
         documentId: doc.id,
         dealId: dealIdForHeader,
+        agentName: actorName,
         agentEmail: actorEmail,
+        agentPhone: actorPhone,
       });
     }
 
@@ -1821,12 +1893,7 @@ if (!jobs.length) {
       'object.edad': edad !== null ? String(edad) : '',
     };
 
-    const agentEmail = String(
-      req.body?.actor?.email ||
-      req.body?.agent_email ||
-      req.body?.agentEmail ||
-      ''
-    ).trim();
+    const agent = await resolveAgentForDocs(req, deal);
 
     const results = [];
     for (const job of jobs) {
@@ -1865,11 +1932,13 @@ if (!jobs.length) {
         preserveMissingPlaceholders: true,
       });
 
-      // 5.5) Header gris: DEAL.<deal_id> [email]
+      // 5.5) Header gris: DEAL.<deal_id> · Agente: <nombre/email>
       await ensureDealAgentHeader({
         documentId: copied.id,
         dealId,
-        agentEmail,
+        agentName: agent.name,
+        agentEmail: agent.email,
+        agentPhone: agent.phone,
       });
 
       // 6) Export PDF + upload
@@ -1902,10 +1971,11 @@ if (!jobs.length) {
     let note = null;
     if (!dryRun && shouldNote) {
             const okPdfs = results.filter(r => r.status === 'done' && r.pdf_url);
-      const actorName = String(req.body?.actor?.name || '').trim();
-      const actorId = String(req.body?.actor?.id || '').trim();
-      const actorInfo = agentEmail
-        ? (actorName ? `${actorName} <${agentEmail}>` : agentEmail)
+      const actorName = safeName(req.body?.actor?.name || agent.name || '');
+      const actorId = String(req.body?.actor?.id || deal?.owner_id || '').trim();
+      const actorEmail = safeName(req.body?.actor?.email || agent.email || '');
+      const actorInfo = actorEmail
+        ? (actorName ? `${actorName} <${actorEmail}>` : actorEmail)
         : (actorName ? `${actorName}${actorId ? ` (${actorId})` : ''}` : (actorId ? actorId : ''));
 
       const lines = [
