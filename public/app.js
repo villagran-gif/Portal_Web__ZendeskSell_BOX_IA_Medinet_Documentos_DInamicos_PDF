@@ -753,6 +753,7 @@ const outEl = $('out');
 const btnCreateDocs = $('btnCreateDocs');
 const docsDryRunEl = $('docsDryRun');
 const docsStatusEl = $('docs_status');
+const docsActionStatusEl = $('docs_action_status');
 const docsOutEl = $('docs_out');
 const docsLinksEl = $('docs_links');
 const docsOwnerIdEl = $('docsOwnerId');
@@ -889,6 +890,7 @@ async function loadTemplates(force = false) {
     setStatus(docsStatusEl, `Templates cargados: ${json.count}`, 'ok');
   } catch (err) {
     setStatus(docsStatusEl, err.message || String(err), 'error');
+    setDocsActionStatus(err.message || String(err), 'error');
   }
 }
 
@@ -947,6 +949,20 @@ function renderDocsLinks(json) {
   }).join('');
 
   docsLinksEl.innerHTML = header + (items ? `<ul class="docs-links-list">${items}</ul>` : '<div class="muted small">Sin resultados</div>');
+}
+
+
+function setDocsActionStatus(msg, kind = 'info') {
+  if (!docsActionStatusEl) return;
+  const hasText = String(msg || '').trim().length > 0;
+  docsActionStatusEl.hidden = !hasText;
+  if (!hasText) {
+    docsActionStatusEl.innerHTML = '';
+    docsActionStatusEl.className = 'status docs-action-status';
+    return;
+  }
+  setStatus(docsActionStatusEl, msg, kind);
+  docsActionStatusEl.classList.add('docs-action-status');
 }
 
 function setStatus(el, msg, kind = 'info') {
@@ -1107,6 +1123,7 @@ btnCreateDocs.addEventListener('click', async () => {
   const ownerIdRaw = String(docsOwnerIdEl?.value || '').trim();
   if (!ownerIdRaw) {
     setStatus(docsStatusEl, 'Debes seleccionar un agente (obligatorio para consignar en notas).', 'error');
+    setDocsActionStatus('Debes seleccionar un agente antes de crear documentos.', 'error');
     updateDocsButton();
     return;
   }
@@ -1117,6 +1134,7 @@ btnCreateDocs.addEventListener('click', async () => {
 
   const dry = !!docsDryRunEl.checked;
   setStatus(docsStatusEl, dry ? 'Preparando vista previa...' : 'Generando documentos...', 'running');
+  setDocsActionStatus(dry ? 'Preparando vista previa de documentos...' : 'Generando documentos...', 'running');
   docsOutEl.textContent = '';
   if (docsLinksEl) docsLinksEl.innerHTML = '';
 
@@ -1126,6 +1144,7 @@ btnCreateDocs.addEventListener('click', async () => {
 
 if (docsTemplatesEl && selectedTemplates.length === 0) {
   setStatus(docsStatusEl, 'Debes seleccionar al menos 1 template.', 'error');
+  setDocsActionStatus('Debes seleccionar al menos 1 template.', 'error');
   return;
 }
 
@@ -1145,12 +1164,19 @@ const json = await res.json();
     renderDocsLinks(json);
     if (!res.ok) {
       setStatus(docsStatusEl, json.message || 'Error', 'error');
+      setDocsActionStatus(json.message || 'Error al generar documentos.', 'error');
     } else {
-      if (dry) setStatus(docsStatusEl, 'Vista Previa OK… confirma “CREAR DOCUMENTOS”', 'ok');
-      else setStatus(docsStatusEl, 'Documentos generados ✅', 'ok');
+      if (dry) {
+        setStatus(docsStatusEl, 'Vista Previa OK… confirma “CREAR DOCUMENTOS”', 'ok');
+        setDocsActionStatus('Vista previa lista. Confirma “CREAR DOCUMENTOS”.', 'ok');
+      } else {
+        setStatus(docsStatusEl, 'Documentos generados ✅', 'ok');
+        setDocsActionStatus('Documentos generados ✅', 'ok');
+      }
     }
   } catch (err) {
     setStatus(docsStatusEl, err.message || String(err), 'error');
+    setDocsActionStatus(err.message || String(err), 'error');
   }
 });
 
@@ -1387,6 +1413,22 @@ function collectContactData() {
     direccion: fields.direccion.value.trim(),
     comuna: fields.comuna.value.trim(),
   };
+}
+
+function focusContactField(fieldId) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+
+  try {
+    if (el.tomselect && typeof el.tomselect.focus === 'function') {
+      el.tomselect.focus();
+    } else {
+      el.focus({ preventScroll: true });
+    }
+  } catch (_err) {}
+
+  const card = document.getElementById('contactCard') || el.closest('.card');
+  try { card?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_err) {}
 }
 
 function renderSummary(json) {
@@ -1626,17 +1668,39 @@ function renderDealResult(json) {
     parts.push(`<div class="summary-row" style="color:#ff5a7a"><b>${escapeHtml(json.warning_banner)}</b></div>`);
   }
 
+  const preview = json?.vista_previa || json?.vistaPrevia || json?.preview || null;
+  if (preview) {
+    const custom = preview.custom_fields || {};
+    parts.push(`
+      <div class="kv">
+        <div class="k">Deal name</div><div class="v">${escapeHtml(preview.deal_name || preview.name || json?.deal?.name || '—')}</div>
+        <div class="k">Contact ID</div><div class="v">${escapeHtml(String(preview.contact_id || json?.deal?.contact_id || '—'))}</div>
+        <div class="k">RUT normalizado</div><div class="v">${escapeHtml(preview.rut_normalizado || custom.RUT_normalizado || '—')}</div>
+        <div class="k">RUT (humano)</div><div class="v">${escapeHtml(preview.rut_humano || custom['RUT o ID'] || '—')}</div>
+        <div class="k">Aseguradora</div><div class="v">${escapeHtml(preview.aseguradora || custom.Previsión || '—')}</div>
+        <div class="k">Modalidad</div><div class="v">${escapeHtml(preview.modalidad || custom.Modalidad || '—')}</div>
+        <div class="k">Comuna</div><div class="v">${escapeHtml(preview.comuna || custom.Ciudad || '—')}</div>
+        <div class="k">Estatura</div><div class="v">${escapeHtml(custom.Estatura || preview.estatura || '—')}</div>
+        <div class="k">Peso</div><div class="v">${escapeHtml(custom.Peso || preview.peso || '—')}</div>
+        <div class="k">Interés</div><div class="v">${escapeHtml(custom['Interés'] || preview.interes || '—')}</div>
+        <div class="k">Validación PAD</div><div class="v">${escapeHtml(custom['Validacion PAD'] || preview.validacion_pad || '—')}</div>
+      </div>
+    `);
+  }
+
   if (json.deal) {
     const d = json.deal;
-    parts.push(
-      `<div class="summary-row"><b>Deal creado:</b> <a href="${d.desktop_url}" target="_blank" rel="noreferrer">${escapeHtml(d.name || ('Deal #' + d.id))}</a> · <a href="${d.mobile_url}" target="_blank" rel="noreferrer">Mobile</a></div>`
-    );
+    const desktop = d.desktop_url ? `<a href="${d.desktop_url}" target="_blank" rel="noreferrer">${escapeHtml(d.name || ('Deal #' + d.id))}</a>` : escapeHtml(d.name || ('Deal #' + d.id));
+    const mobile = d.mobile_url ? ` · <a href="${d.mobile_url}" target="_blank" rel="noreferrer">Mobile</a>` : '';
+    parts.push(`<div class="summary-row"><b>Deal creado:</b> ${desktop}${mobile}</div>`);
   }
 
   if (json.deals && Array.isArray(json.deals) && json.deals.length) {
-    const items = json.deals.slice(0, 10).map(d =>
-      `<li><a href="${d.desktop_url}" target="_blank" rel="noreferrer">${escapeHtml(d.name || ('Deal #' + d.id))}</a> · <a href="${d.mobile_url}" target="_blank" rel="noreferrer">Mobile</a></li>`
-    ).join('');
+    const items = json.deals.slice(0, 10).map(d => {
+      const desktop = d.desktop_url ? `<a href="${d.desktop_url}" target="_blank" rel="noreferrer">${escapeHtml(d.name || ('Deal #' + d.id))}</a>` : escapeHtml(d.name || ('Deal #' + d.id));
+      const mobile = d.mobile_url ? ` · <a href="${d.mobile_url}" target="_blank" rel="noreferrer">Mobile</a>` : '';
+      return `<li>${desktop}${mobile}</li>`;
+    }).join('');
     parts.push(`<div class="summary-row"><b>Deals encontrados en el mismo pipeline:</b><ul style="margin:6px 0 0 18px;">${items}</ul></div>`);
   }
 
@@ -1668,6 +1732,13 @@ if (!ownerId || !Number.isFinite(ownerId)) {
 
   // Tomamos los mismos datos extraídos del IA BOX (RUT, nombres, apellidos, previsión, etc.)
   const body = collectContactData();
+
+  if (!body.aseguradora) {
+    setStatus(dStatus, 'Falta Aseguradora/Previsión. Completa ese campo en “Crear contacto” y vuelve a intentar.', 'error');
+    setStatus(cStatus, 'Completa Aseguradora/Previsión para poder crear el Deal/TRATO.', 'error');
+    focusContactField('c_aseguradora');
+    return;
+  }
   body.contact_id = contactId;
   body.pipeline_id = pipelineId;
   body.owner_id = ownerId;
@@ -1717,6 +1788,11 @@ if (!ownerId || !Number.isFinite(ownerId)) {
       setStatus(dStatus, json.warning_banner, res.ok ? 'info' : 'error');
     } else {
       setStatus(dStatus, json.message || (res.ok ? 'OK' : 'Error'), res.ok ? 'ok' : 'error');
+    }
+
+    if (!res.ok && (String(json?.error || '').includes('MISSING_ASEGURADORA') || /Aseguradora\/Previsi[oó]n/i.test(String(json?.message || '')))) {
+      setStatus(cStatus, 'Falta Aseguradora/Previsión. Selecciónala en el bloque de contacto.', 'error');
+      focusContactField('c_aseguradora');
     }
 
     renderDealResult(json);
