@@ -146,6 +146,16 @@ function parseDobFromLines(lines) {
   return '';
 }
 
+function extractNumericByLabels(lines, labels, { normalizeDecimal = false } = {}) {
+  const raw = extractByLabels(lines, labels);
+  if (!raw) return '';
+
+  let v = String(raw).trim();
+  if (normalizeDecimal) v = v.replace(',', '.');
+  const m = v.match(/\d+(?:\.\d+)?/);
+  return m ? m[0] : '';
+}
+
 function extractPhonesFromLines(lines, rutNum, rutNumPlusDv) {
   // Prefer labeled lines
   const keyWords = /(CELULAR|CEL\.|MÓVIL|MOVIL|TELÉFONO|TELEFONO|FONO|WHATSAPP)/i;
@@ -706,6 +716,9 @@ function parseIABox(raw) {
   let modalidad = extractByLabels(lines, ['Modalidad']);
   if (!modalidad) modalidad = ''; // don't guess for now
 
+  const peso = extractNumericByLabels(lines, ['Peso'], { normalizeDecimal: true });
+  const estatura = extractNumericByLabels(lines, ['Estatura', 'Altura'], { normalizeDecimal: true });
+
   const fullNameGuess = normalizeSpaces([nombres, apellidos].filter(Boolean).join(' '));
   const addr = guessAddressAndComuna(lines, rut, email, fecha, telefono1, telefono2, fullNameGuess);
 
@@ -736,6 +749,8 @@ function parseIABox(raw) {
     modalidad,
     direccion,
     comuna,
+    peso,
+    estatura,
   };
 }
 
@@ -1382,6 +1397,25 @@ function fillFields(obj) {
   if (obj.comuna) setSmartValue(fields.comuna, obj.comuna, { normalize: normalizeUpper, allowCreate: false });
 
   if (obj.direccion) fields.direccion.value = obj.direccion;
+
+  autoFillDealVitals(obj);
+}
+
+function autoFillDealVitals(obj) {
+  if (!obj || typeof obj !== 'object') return;
+
+  const dealPesoEl = document.getElementById('dealPeso');
+  const dealEstaturaEl = document.getElementById('dealEstatura');
+
+  const nextPeso = String(obj.peso || '').trim();
+  if (dealPesoEl && !String(dealPesoEl.value || '').trim() && nextPeso) {
+    dealPesoEl.value = nextPeso;
+  }
+
+  const nextEstatura = parseHeightCmStrict(obj.estatura);
+  if (dealEstaturaEl && !String(dealEstaturaEl.value || '').trim() && nextEstatura !== null) {
+    dealEstaturaEl.value = String(nextEstatura);
+  }
 }
 
 
@@ -1942,25 +1976,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-async function loadDealListChoices(fieldName, selectId) {
+async function loadDealListChoices(fieldName, selectId, fallbackOptions = [], fieldId = null) {
   const sel = document.getElementById(selectId);
   if (!sel) return;
+
+  const renderOptions = (rawChoices) => {
+    const apiChoices = (rawChoices || []).map(c => String(c?.name || '').trim()).filter(Boolean);
+    const fallback = (fallbackOptions || []).map(x => String(x || '').trim()).filter(Boolean);
+    const merged = Array.from(new Set([...apiChoices, ...fallback]));
+    sel.innerHTML = `<option value="">(opcional)</option>` + merged.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+  };
+
   sel.innerHTML = `<option value="">Cargando...</option>`;
   try {
-    const res = await fetch(`/api/deal-list-choices?field=${encodeURIComponent(fieldName)}`);
+    const params = new URLSearchParams();
+    if (fieldId !== null && fieldId !== undefined && fieldId !== '') params.set('field_id', String(fieldId));
+    if (fieldName) params.set('field', String(fieldName));
+
+    const res = await fetch(`/api/deal-list-choices?${params.toString()}`);
     const json = await res.json();
     if (!res.ok || !json.ok) throw new Error(json.message || json.error || 'Error cargando');
-    const choices = json.choices || [];
-    sel.innerHTML = `<option value="">(opcional)</option>` + choices.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+    renderOptions(json.choices || []);
   } catch (e) {
-    sel.innerHTML = `<option value="">(opcional)</option>`;
+    renderOptions([]);
     console.error(e);
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   loadDealListChoices('CIRUJANO BARIÁTRICO', 'dealCirujanoBariatrico');
-  loadDealListChoices('CIRUJANO PLASTICO', 'dealCirujanoPlastico');
+  loadDealListChoices('CIRUJANO PLASTICO', 'dealCirujanoPlastico', [
+    'CARLOS ARCE',
+    'BRUNO SOLARI',
+    'RODRIGO VILLAGRAN'
+  ], 2656700);
   loadDealListChoices('CIRUJANO DE BALON', 'dealCirujanoBalon');
   const cirujanoGeneral = document.getElementById('dealCirujanoGeneral');
   if (cirujanoGeneral) {
@@ -1976,4 +2025,3 @@ document.addEventListener('DOMContentLoaded', () => {
     cirujanoGeneral.innerHTML = `<option value="">(opcional)</option>` + options.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
   }
 });
-
