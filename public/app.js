@@ -1976,25 +1976,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-async function loadDealListChoices(fieldName, selectId) {
+async function loadDealListChoices(fieldName, selectId, fallbackOptions = [], fieldId = null) {
   const sel = document.getElementById(selectId);
   if (!sel) return;
+
+  const renderOptions = (rawChoices) => {
+    const apiChoices = (rawChoices || []).map(c => String(c?.name || '').trim()).filter(Boolean);
+    const fallback = (fallbackOptions || []).map(x => String(x || '').trim()).filter(Boolean);
+    const merged = Array.from(new Set([...apiChoices, ...fallback]));
+    sel.innerHTML = `<option value="">(opcional)</option>` + merged.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+  };
+
   sel.innerHTML = `<option value="">Cargando...</option>`;
   try {
-    const res = await fetch(`/api/deal-list-choices?field=${encodeURIComponent(fieldName)}`);
+    const params = new URLSearchParams();
+    if (fieldId !== null && fieldId !== undefined && fieldId !== '') params.set('field_id', String(fieldId));
+    if (fieldName) params.set('field', String(fieldName));
+
+    const res = await fetch(`/api/deal-list-choices?${params.toString()}`);
     const json = await res.json();
     if (!res.ok || !json.ok) throw new Error(json.message || json.error || 'Error cargando');
-    const choices = json.choices || [];
-    sel.innerHTML = `<option value="">(opcional)</option>` + choices.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+    renderOptions(json.choices || []);
   } catch (e) {
-    sel.innerHTML = `<option value="">(opcional)</option>`;
+    renderOptions([]);
     console.error(e);
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   loadDealListChoices('CIRUJANO BARIÁTRICO', 'dealCirujanoBariatrico');
-  loadDealListChoices('CIRUJANO PLASTICO', 'dealCirujanoPlastico');
+  loadDealListChoices('CIRUJANO PLASTICO', 'dealCirujanoPlastico', [
+    'CARLOS ARCE',
+    'BRUNO SOLARI',
+    'RODRIGO VILLAGRAN'
+  ], 2656700);
   loadDealListChoices('CIRUJANO DE BALON', 'dealCirujanoBalon');
   const cirujanoGeneral = document.getElementById('dealCirujanoGeneral');
   if (cirujanoGeneral) {
