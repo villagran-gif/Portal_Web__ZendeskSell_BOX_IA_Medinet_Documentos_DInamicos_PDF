@@ -462,35 +462,20 @@ app.get('/api/owners', async (_req, res) => {
 app.get('/api/deal-list-choices', async (req, res) => {
   try {
     const field = String(req.query.field || '').trim();
-    const fieldIdRaw = String(req.query.field_id || '').trim();
-    const fieldId = fieldIdRaw ? Number(fieldIdRaw) : null;
-
-    if (!field && !fieldIdRaw) {
-      return res.status(400).json({ ok:false, error:'MISSING_FIELD', message:'field o field_id requerido' });
-    }
-    if (fieldIdRaw && !Number.isFinite(fieldId)) {
-      return res.status(400).json({ ok:false, error:'INVALID_FIELD_ID', message:'field_id inválido' });
-    }
+    if (!field) return res.status(400).json({ ok:false, error:'MISSING_FIELD', message:'field requerido' });
 
     const cat = await getDealCatalog();
-    let f = null;
-
-    if (Number.isFinite(fieldId)) {
-      f = cat.fields.find(x => Number(x.id) === fieldId) || null;
-    }
-    if (!f && field) {
-      const targetNorm = normKey(field);
-      f = cat.fields.find(x => normKey(x.name) === targetNorm) || null;
-    }
-
-    if (!f) return res.status(404).json({ ok:false, error:'FIELD_NOT_FOUND', field, field_id: fieldIdRaw || null });
+    // match by normalized name
+    const targetNorm = normKey(field);
+    const f = cat.fields.find(x => normKey(x.name) === targetNorm);
+    if (!f) return res.status(404).json({ ok:false, error:'FIELD_NOT_FOUND', field });
 
     if (f.type !== 'list' || !Array.isArray(f.choices)) {
-      return res.status(200).json({ ok:true, field: f.name, field_id: f.id, type: f.type, choices: [] });
+      return res.status(200).json({ ok:true, field: f.name, type: f.type, choices: [] });
     }
 
     const choices = f.choices.map(ch => ({ id: ch.id, name: ch.name }));
-    return res.status(200).json({ ok:true, field: f.name, field_id: f.id, type: f.type, choices });
+    return res.status(200).json({ ok:true, field: f.name, type: f.type, choices });
   } catch (err) {
     console.error('deal-list-choices error', err);
     return res.status(500).json({ ok:false, error:'ERROR', message: err.message || String(err) });
